@@ -1,0 +1,164 @@
+### Inline env
+@host = http://localhost:8080
+@json = application/json
+
+### Helpers (kommentar)
+# const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+
+### 1) Create user 1
+# @name createUser1
+POST {{host}}/api/users
+Content-Type: {{json}}
+
+{
+  "username": "alice",
+  "email": "alice@example.com"
+}
+
+> {%
+    const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.global.set("user1Id", body.id);
+    client.assert(!!body.id, "user1Id missing");
+%}
+
+### 2) Create user 2
+# @name createUser2
+POST {{host}}/api/users
+Content-Type: {{json}}
+
+{
+  "username": "bob",
+  "email": "bob@example.com"
+}
+
+> {%
+    const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.global.set("user2Id", body.id);
+    client.assert(!!body.id, "user2Id missing");
+%}
+
+### 3) List all users (must contain both)
+# @name listUsers
+GET {{host}}/api/users
+
+> {%
+    const arr = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    const u1 = client.global.get("user1Id"), u2 = client.global.get("user2Id");
+    client.test("Contains user1", () => client.assert(arr.some(u => u.id === u1), "user1 not found"));
+    client.test("Contains user2", () => client.assert(arr.some(u => u.id === u2), "user2 not found"));
+%}
+
+### 4) User 1 creates a new poll with two options
+# @name createPoll
+POST {{host}}/api/polls
+Content-Type: {{json}}
+
+{
+  "creatorId": "{{user1Id}}",
+  "question": "What should we eat for lunch?",
+  "validUntil": "2030-01-01T00:00:00Z",
+  "options": [
+    { "caption": "Pizza", "presentationOrder": 1 },
+    { "caption": "Sushi", "presentationOrder": 2 }
+  ]
+}
+
+> {%
+    const p = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    // POST /polls gir full Poll med createdBy som objekt og options som liste
+    client.global.set("pollId", p.id);
+    client.assert(Array.isArray(p.options) && p.options.length >= 2, "options missing");
+    client.global.set("opt1Id", p.options[0].id);
+    client.global.set("opt2Id", p.options[1].id);
+
+    // sanity: createdBy objekt med id matcher user1Id
+    const createdById = p.createdBy && p.createdBy.id ? p.createdBy.id : p.createdBy;
+    client.test("creator matches user1", () => client.assert(createdById === client.global.get("user1Id"), "creator mismatch"));
+%}
+
+### 5) List polls (summary) – verify created poll is present
+# @name listPolls
+GET {{host}}/api/polls
+
+> {%
+    const arr = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    // GET /polls gir PollSummary (createdBy er id-streng)
+    const pollId = client.global.get("pollId");
+    client.test("Created poll is listed", () => client.assert(arr.some(p => p.id === pollId), "created poll not found"));
+%}
+
+### 6) User 2 votes on option1
+# @name castVoteUser2
+PUT {{host}}/api/polls/{{pollId}}/votes
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "optionId": "{{opt1Id}}"
+}
+
+> {%
+    const v = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    // Ikke stol på felt-navn; verifiser i steg 8 via GET
+    client.assert(response.status === 200 || response.status === 201, "Unexpected status: " + response.status);
+%}
+
+### 7) User 2 changes vote to option2
+# @name changeVoteUser2
+PUT {{host}}/api/polls/{{pollId}}/votes
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "optionId": "{{opt2Id}}"
+}
+
+> {%
+    client.assert(response.status === 200 || response.status === 201, "Unexpected status: " + response.status);
+%}
+
+### 8) List votes for poll – latest vote by user2 must be option2
+# @name listVotesForPoll
+GET {{host}}/api/polls/{{pollId}}/votes
+
+> {%
+    const arr = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+
+    // Håndter både flattenet og nestet JSON:
+    const voterIdOf = x => x.voterId || (x.voter && x.voter.id);
+    const optionIdOf = x => x.optionId || (x.option && x.option.id);
+    const pollIdOf = x => x.pollId || (x.option && x.option.poll);
+    const published = x => x.publishedAt || x.published_at || x.createdAt || x.updatedAt;
+
+    client.test("At least one vote exists", () => client.assert(arr.length >= 1, "Expected at least 1 vote"));
+    const user2 = client.global.get("user2Id");
+    const mine = arr.filter(v => voterIdOf(v) === user2);
+    client.test("User2 has a vote", () => client.assert(mine.length >= 1, "User2 vote not found"));
+    mine.sort((a, b) => new Date(published(b)) - new Date(published(a)));
+    const latest = mine[0];
+    client.test("Latest vote on option2", () => client.assert(optionIdOf(latest) === client.global.get("opt2Id"),
+        "Latest vote not on option2: " + optionIdOf(latest)));
+    client.test("Vote belongs to poll", () => client.assert(pollIdOf(latest) === client.global.get("pollId"),
+        "Wrong poll id: " + pollIdOf(latest)));
+%}
+
+### 9) Delete poll
+# @name deletePoll
+DELETE {{host}}/api/polls/{{pollId}}
+
+> {%
+    client.assert(response.status === 204 || response.status === 200, "Unexpected status: " + response.status);
+%}
+
+### 10) List votes again – expect 404 or empty list
+# @name listVotesAfterDeletion
+GET {{host}}/api/polls/{{pollId}}/votes
+
+> {%
+    if (response.status === 200) {
+        const arr = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+        client.assert(arr.length === 0, "Expected 0 votes, got " + arr.length);
+    } else {
+        client.assert(response.status === 404, "Expected 404 or empty list, got " + response.status);
+    }
+%}
