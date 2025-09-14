@@ -53,5 +53,4 @@ I have a ongoing issue with my API that i cant downvote an option. I have some i
 but i have not had the time to implement it yet. I will probably do some more refactoring to my current desing
 espescially the PollManager and how i handle the Poll and Voting, because now it is a bit buggy.
 
-
-
+![The app](src/main/resources/images/poll-app.png)
