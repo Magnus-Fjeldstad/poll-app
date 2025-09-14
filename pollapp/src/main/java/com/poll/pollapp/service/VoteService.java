@@ -33,4 +33,16 @@ public class VoteService {
     public void delete(UUID id) {
         votes.deleteById(id);
     }
+
+    public Vote voteOption(UUID optionId, UUID userId, int value) {
+        return manager.castOrChangeOptionVote(optionId, userId, value);
+    }
+
+    public int scoreForOption(UUID optionId) {
+        return manager.scoreForOption(optionId);
+    }
+
+    public long countForOption(UUID optionId) {
+        return manager.countForOption(optionId);
+    }
 }

@@ -18,9 +18,8 @@ import java.util.UUID;
 public class Vote {
     @Builder.Default
     private UUID id = UUID.randomUUID();
-
     private Instant publishedAt;
-
-    private User voter;          // who
-    private VoteOption option;   // chosen option (belongs to a Poll)
+    private User voter;
+    private VoteOption option;
+    private int value;
 }

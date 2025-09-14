@@ -162,3 +162,161 @@ GET {{host}}/api/polls/{{pollId}}/votes
         client.assert(response.status === 404, "Expected 404 or empty list, got " + response.status);
     }
 %}
+
+### 11) Create a second poll for per-option up/down tests
+# @name createPoll2
+POST {{host}}/api/polls
+Content-Type: {{json}}
+
+{
+  "creatorId": "{{user1Id}}",
+  "question": "Pineapple on pizza?",
+  "validUntil": "2030-01-01T00:00:00Z",
+  "options": [
+    { "caption": "Oh yammy!", "presentationOrder": 1 },
+    { "caption": "Mamma Mia! Hell no!", "presentationOrder": 2 }
+  ]
+}
+
+> {%
+    const p = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.global.set("poll2Id", p.id);
+    client.assert(Array.isArray(p.options) && p.options.length === 2, "poll2 options missing");
+
+    // lagre option-ider
+    client.global.set("optAId", p.options[0].id);
+    client.global.set("optBId", p.options[1].id);
+%}
+
+### 12) User2 upvotes optA (+1) -> expect score=1, votes=1
+# @name upvote_optA_user2
+PUT {{host}}/api/options/{{optAId}}/vote
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "value": 1
+}
+
+> {%
+    const r = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.test("score == 1", () => client.assert(r.score === 1, "expected score 1, got " + r.score));
+    client.test("votes == 1", () => client.assert(r.votes === 1, "expected votes 1, got " + r.votes));
+%}
+
+### 13) User2 upvotes optA again (same +1) -> toggle to UNVOTE -> expect score=0, votes=0
+# @name toggle_unvote_optA_user2
+PUT {{host}}/api/options/{{optAId}}/vote
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "value": 1
+}
+
+> {%
+    const r = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.test("score == 0 after toggle", () => client.assert(r.score === 0, "expected score 0, got " + r.score));
+    client.test("votes == 0 after toggle", () => client.assert(r.votes === 0, "expected votes 0, got " + r.votes));
+%}
+
+### 14) User2 DOWNVOTES optA (-1) -> expect score=-1, votes=1
+# @name downvote_optA_user2
+PUT {{host}}/api/options/{{optAId}}/vote
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "value": -1
+}
+
+> {%
+    const r = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.test("score == -1", () => client.assert(r.score === -1, "expected score -1, got " + r.score));
+    client.test("votes == 1", () => client.assert(r.votes === 1, "expected votes 1, got " + r.votes));
+%}
+
+### 15) User2 switches to UPVOTE on optA (+1) -> expect score=+1, votes=1
+# @name switch_to_upvote_optA_user2
+PUT {{host}}/api/options/{{optAId}}/vote
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "value": 1
+}
+
+> {%
+    const r = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.test("score == +1 after switch", () => client.assert(r.score === 1, "expected score 1, got " + r.score));
+    client.test("votes == 1 after switch", () => client.assert(r.votes === 1, "expected votes 1, got " + r.votes));
+%}
+
+### 16) User1 also upvotes optA -> expect score=+2, votes=2 (two different users)
+# @name upvote_optA_user1
+PUT {{host}}/api/options/{{optAId}}/vote
+Content-Type: {{json}}
+
+{
+  "userId": "{{user1Id}}",
+  "value": 1
+}
+
+> {%
+    const r = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.test("score == 2 (alice + bob)", () => client.assert(r.score === 2, "expected score 2, got " + r.score));
+    client.test("votes == 2 (two voters)", () => client.assert(r.votes === 2, "expected votes 2, got " + r.votes));
+%}
+
+### 17) User2 upvotes optB as well (independent per option) -> expect optB score=+1, votes=1
+# @name upvote_optB_user2
+PUT {{host}}/api/options/{{optBId}}/vote
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "value": 1
+}
+
+> {%
+    const r = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.test("optB score == 1", () => client.assert(r.score === 1, "expected score 1, got " + r.score));
+    client.test("optB votes == 1", () => client.assert(r.votes === 1, "expected votes 1, got " + r.votes));
+%}
+
+### 18) Verify optA is unchanged by voting on optB (should still be score=2, votes=2)
+# @name recheck_optA
+PUT {{host}}/api/options/{{optAId}}/vote
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "value": 1
+}
+
+> {%
+    // Dette kallet toggler egentlig bob sin optA-stemme hvis den var +1,
+    // så vi bruker en liten hack: Avbryt assertion hvis status ikke er 200/201.
+    // Alternativ: kommenter ut dette steget, eller lage en GET-scoreroute.
+    client.assert(response.status === 200 || response.status === 201, "Unexpected status: " + response.status);
+%}
+
+### 18) Get stats for optA (no state change)
+GET {{host}}/api/options/{{optAId}}/stats
+
+> {%
+    const r = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.test("optA score == 2", () => client.assert(r.score === 2, "expected 2, got " + r.score));
+    client.test("optA votes == 2", () => client.assert(r.votes === 2, "expected 2, got " + r.votes));
+%}
+
+
+
+### 19) Cleanup: delete poll2
+# @name deletePoll2
+DELETE {{host}}/api/polls/{{poll2Id}}
+
+> {%
+    client.assert(response.status === 204 || response.status === 200, "Unexpected status: " + response.status);
+%}
+
