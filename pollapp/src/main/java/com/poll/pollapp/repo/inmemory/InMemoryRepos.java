@@ -15,6 +15,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * In-memory implementation of UserRepo
+ * Used to seperate logic from PollManager
+ */
 @Repository
 class InMemoryUserRepository implements UserRepo {
     private final PollManager manager;

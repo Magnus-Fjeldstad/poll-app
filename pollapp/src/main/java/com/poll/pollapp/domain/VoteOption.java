@@ -15,6 +15,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+/**
+ * VoteOption class
+ * Uses Lombok annotations for getters, setters, equals, hashCode, toString, and builder
+ */
 public class VoteOption {
     @Builder.Default
     private UUID id = UUID.randomUUID();
@@ -22,6 +26,5 @@ public class VoteOption {
     private String caption;
     private int presentationOrder;
 
-    // back reference to the Poll aggregate
     private Poll poll;
 }

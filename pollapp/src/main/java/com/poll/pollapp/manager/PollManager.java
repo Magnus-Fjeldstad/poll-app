@@ -19,36 +19,80 @@ public class PollManager {
     private final Map<UUID, Vote> votes = new ConcurrentHashMap<>();
 
     // -------- Users --------
+
+    /**
+     * Lists all users
+     *
+     * @return List of users
+     */
     public List<User> listUsers() {
         return new ArrayList<>(users.values());
     }
 
+    /**
+     * Returns a user by ID, or empty if not found.
+     *
+     * @param id user ID
+     * @return Optional containing the user, or empty if not found
+     */
     public Optional<User> getUser(UUID id) {
         return Optional.ofNullable(users.get(id));
     }
 
+    /**
+     * Saves a user
+     *
+     * @param u user to save
+     * @return saved user
+     */
     public User saveUser(User u) {
         users.put(u.getId(), u);
         return u;
     }
 
+    /**
+     * Deletes a user and all their polls and votes
+     *
+     * @param id user ID
+     */
     public void deleteUser(UUID id) {
         var u = users.remove(id);
         if (u == null) return;
-        // cleanup: remove created polls & votes by this user
         u.getCreated().forEach(p -> deletePoll(p.getId()));
         u.getVoted().forEach(v -> deleteVote(v.getId()));
     }
 
     // -------- Polls --------
+
+    /**
+     * Lists all polls
+     *
+     * @return List of polls
+     */
     public List<Poll> listPolls() {
         return new ArrayList<>(polls.values());
     }
 
+    /**
+     * Returns a poll by ID, or empty if not found.
+     *
+     * @param id
+     * @return Optional containing the poll, or empty if not found
+     */
     public Optional<Poll> getPoll(UUID id) {
         return Optional.ofNullable(polls.get(id));
     }
 
+    /**
+     * Creates a new poll
+     *
+     * @param creator
+     * @param question
+     * @param publishedAt
+     * @param validUntil
+     * @param opts
+     * @return created poll
+     */
     public Poll createPoll(User creator, String question, Instant publishedAt, Instant validUntil, List<VoteOption> opts) {
         Poll p = Poll.builder()
                 .question(question)
@@ -57,7 +101,6 @@ public class PollManager {
                 .createdBy(creator)
                 .build();
 
-        // attach options
         if (opts != null) {
             for (VoteOption o : opts) {
                 o.setPoll(p);
@@ -71,21 +114,30 @@ public class PollManager {
         return p;
     }
 
+    /**
+     * Saves a poll
+     *
+     * @param p poll to save
+     * @return saved poll
+     */
     public Poll savePoll(Poll p) {
         polls.put(p.getId(), p);
         return p;
     }
 
+    /**
+     * Deletes a poll and all its options and votes
+     *
+     * @param pollId poll ID
+     */
     public void deletePoll(UUID pollId) {
         Poll p = polls.remove(pollId);
         if (p == null) return;
 
-        // remove options
         for (VoteOption o : p.getOptions()) {
             options.remove(o.getId());
         }
 
-        // remove votes
         for (Vote v : p.getVotes()) {
             votes.remove(v.getId());
             if (v.getVoter() != null) v.getVoter().getVoted().remove(v);
@@ -95,14 +147,36 @@ public class PollManager {
     }
 
     // -------- VoteOptions --------
+
+    /**
+     * Gets an option in a poll
+     *
+     * @param id option id
+     * @return Optional containing the option, or empty if not found
+     */
     public Optional<VoteOption> getOption(UUID id) {
         return Optional.ofNullable(options.get(id));
     }
 
+    /**
+     * Lists all options in a poll
+     *
+     * @param pollId poll ID
+     * @return List of options in the poll
+     */
     public List<VoteOption> listOptionsByPoll(UUID pollId) {
         return getPoll(pollId).map(Poll::getOptions).orElseGet(List::of);
     }
 
+
+    /**
+     * Casts or changes a vote
+     *
+     * @param pollId   poll ID
+     * @param userId   user ID
+     * @param optionId option ID
+     * @return casted or changed vote
+     */
     public Vote castOrChangeVote(UUID pollId, UUID userId, UUID optionId) {
         Poll poll = required(getPoll(pollId), "Poll not found");
         User voter = required(getUser(userId), "User not found");
@@ -178,14 +252,31 @@ public class PollManager {
         return v;
     }
 
+    /**
+     * Lists all votes in a poll
+     *
+     * @param pollId poll ID
+     * @return List of votes in the poll
+     */
     public List<Vote> listVotesByPoll(UUID pollId) {
         return getPoll(pollId).map(Poll::getVotes).orElseGet(List::of);
     }
 
+    /**
+     * Gets a vote by ID
+     *
+     * @param id vote ID
+     * @return Optional containing the vote, or empty if not found
+     */
     public Optional<Vote> getVote(UUID id) {
         return Optional.ofNullable(votes.get(id));
     }
 
+    /**
+     * Deletes a vote
+     *
+     * @param voteId vote ID
+     */
     public void deleteVote(UUID voteId) {
         Vote v = votes.remove(voteId);
         if (v == null) return;
@@ -195,7 +286,13 @@ public class PollManager {
         }
     }
 
-    // -------- Aggregation helpers (for UI) --------
+
+    /**
+     * Gets the score for an option
+     *
+     * @param optionId option ID
+     * @return score for the option
+     */
     public int scoreForOption(UUID optionId) {
         return getOption(optionId).map(opt ->
                 opt.getPoll().getVotes().stream()
@@ -204,6 +301,7 @@ public class PollManager {
                         .sum()
         ).orElse(0);
     }
+
 
     public long countForOption(UUID optionId) {
         return getOption(optionId).map(opt ->

@@ -16,6 +16,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+/**
+ * User class
+ * Uses Lombok annotations for getters, setters, equals, hashCode, toString, and builder
+ */
 public class User {
     @Builder.Default
     private UUID id = UUID.randomUUID();

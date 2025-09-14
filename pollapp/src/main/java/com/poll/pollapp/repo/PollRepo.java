@@ -12,6 +12,6 @@ public interface PollRepo {
     Optional<Poll> findById(UUID id);
 
     Poll save(Poll p);
-
+    
     void deleteById(UUID id);
 }

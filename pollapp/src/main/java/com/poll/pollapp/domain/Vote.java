@@ -15,6 +15,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
+/**
+ * Vote class
+ * Uses Lombok annotations for getters, setters, equals, hashCode, toString, and builder
+ */
 public class Vote {
     @Builder.Default
     private UUID id = UUID.randomUUID();

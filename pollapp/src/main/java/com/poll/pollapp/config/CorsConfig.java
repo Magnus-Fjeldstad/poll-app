@@ -11,6 +11,16 @@ import java.util.List;
 @Configuration
 public class CorsConfig {
 
+    /**
+     * Create a {@link CorsFilter} to enable cross-origin resource sharing
+     * (CORS) for the application.
+     *
+     * <p>This configuration allows requests from <code>http://localhost:5173</code>
+     * to access the application's resources. The allowed HTTP methods are
+     * GET, POST, PUT, DELETE, and OPTIONS. All headers are allowed.
+     *
+     * @return a {@link CorsFilter} to enable CORS for the application
+     */
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
