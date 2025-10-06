@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -26,7 +27,9 @@ public class PollController {
 
     @GetMapping
     public List<PollSummary> list() {
-        return service.findAll().stream().map(this::toSummary).collect(Collectors.toList());
+        return service.findAll().stream()
+                .map(this::toSummary)
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -44,8 +47,16 @@ public class PollController {
                                 .build())
                         .collect(Collectors.toList());
 
-        Poll created = service.create(req.getCreatorId(), req.getQuestion(), req.getValidUntil(), options);
-        return ResponseEntity.created(URI.create("/api/polls/" + created.getId())).body(created);
+        Poll created = service.create(
+                req.getCreatorId(),
+                req.getQuestion(),
+                req.getValidUntil(),
+                options
+        );
+
+        return ResponseEntity
+                .created(URI.create("/api/polls/" + created.getId()))
+                .body(created);
     }
 
     @PutMapping("/{id}")
@@ -58,6 +69,11 @@ public class PollController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/results")
+    public ResponseEntity<Map<Integer, Long>> getAggregatedVotes(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.getAggregatedVotes(id));
     }
 
     @GetMapping("/{id}/options")

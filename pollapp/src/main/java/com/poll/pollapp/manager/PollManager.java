@@ -209,6 +209,8 @@ public class PollManager {
         poll.getVotes().add(v);
         voter.getVoted().add(v);
         votes.put(v.getId(), v);
+        System.out.println("Vote added: poll=" + poll.getId() + " voter=" + voter.getUsername() + " option=" + option.getCaption());
+
         return v;
     }
 
