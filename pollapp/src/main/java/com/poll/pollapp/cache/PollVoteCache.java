@@ -22,7 +22,7 @@ public class PollVoteCache {
 
     public Map<String, String> getVotes(UUID pollId) {
         String key = getKey(pollId);
-        return jedis.hgetAll(key); // Redis Hash
+        return jedis.hgetAll(key);
     }
 
     public void putVotes(UUID pollId, Map<Integer, Long> votes) {

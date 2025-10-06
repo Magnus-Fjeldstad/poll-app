@@ -78,6 +78,7 @@ GET {{host}}/api/polls/{{pollId}}/votes
     for (const key in prev) {
         client.test("Cache value unchanged for option " + key, () => client.assert(body[key] === prev[key]));
     }
+
     console.log("Second call (should be HIT):", body);
 %}
 

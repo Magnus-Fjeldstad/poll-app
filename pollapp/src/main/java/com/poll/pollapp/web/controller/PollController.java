@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-
 @RestController
 @RequestMapping("/api/polls")
 public class PollController {
@@ -28,7 +27,9 @@ public class PollController {
 
     @GetMapping
     public List<PollSummary> list() {
-        return service.findAll().stream().map(this::toSummary).collect(Collectors.toList());
+        return service.findAll().stream()
+                .map(this::toSummary)
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -46,8 +47,16 @@ public class PollController {
                                 .build())
                         .collect(Collectors.toList());
 
-        Poll created = service.create(req.getCreatorId(), req.getQuestion(), req.getValidUntil(), options);
-        return ResponseEntity.created(URI.create("/api/polls/" + created.getId())).body(created);
+        Poll created = service.create(
+                req.getCreatorId(),
+                req.getQuestion(),
+                req.getValidUntil(),
+                options
+        );
+
+        return ResponseEntity
+                .created(URI.create("/api/polls/" + created.getId()))
+                .body(created);
     }
 
     @PutMapping("/{id}")
@@ -62,7 +71,7 @@ public class PollController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/{id}/votes")
+    @GetMapping("/{id}/results")
     public ResponseEntity<Map<Integer, Long>> getAggregatedVotes(@PathVariable UUID id) {
         return ResponseEntity.ok(service.getAggregatedVotes(id));
     }

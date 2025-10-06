@@ -31,7 +31,6 @@ public class PollService {
     }
 
     public Map<Integer, Long> getAggregatedVotes(UUID pollId) {
-        // 1. Sjekk cache
         Map<String, String> cached = pollVoteCache.getVotes(pollId);
         if (cached != null && !cached.isEmpty()) {
             return cached.entrySet().stream()
@@ -49,9 +48,8 @@ public class PollService {
                                 .filter(v -> v.getOption() != null && v.getOption().getId().equals(opt.getId()))
                                 .count()
                 ));
-        pollVoteCache.putVotes(pollId, counts);
-        System.out.println("Aggregated votes for poll " + pollId + ": " + counts);
 
+        pollVoteCache.putVotes(pollId, counts);
         return counts;
     }
 
@@ -68,7 +66,6 @@ public class PollService {
                 .orElseThrow(() -> new IllegalArgumentException("Creator not found"));
 
         Poll created = manager.createPoll(creator, question, Instant.now(), validUntil, options);
-
         return polls.save(created);
     }
 

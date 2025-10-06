@@ -23,17 +23,20 @@ public class VoteController {
 
     @GetMapping
     public List<VoteResponse> list(@PathVariable UUID pollId) {
-        return service.listByPoll(pollId).stream().map(this::toResp).collect(Collectors.toList());
+        return service.listByPoll(pollId).stream()
+                .map(this::toResp)
+                .collect(Collectors.toList());
     }
 
-    // Cast or change vote (idempotent for a user+poll)
     @PutMapping
     public ResponseEntity<VoteResponse> castOrChange(
             @PathVariable UUID pollId,
             @RequestBody CastVoteRequest req) {
         Vote v = service.castOrChange(pollId, req.getUserId(), req.getOptionId());
         VoteResponse resp = toResp(v);
-        return ResponseEntity.created(URI.create("/api/polls/" + pollId + "/votes/" + v.getId())).body(resp);
+        return ResponseEntity
+                .created(URI.create("/api/polls/" + pollId + "/votes/" + v.getId()))
+                .body(resp);
     }
 
     @GetMapping("/{voteId}")
@@ -53,7 +56,11 @@ public class VoteController {
         r.setPublishedAt(v.getPublishedAt());
         r.setVoterId(v.getVoter() != null ? v.getVoter().getId() : null);
         r.setOptionId(v.getOption() != null ? v.getOption().getId() : null);
-        r.setPollId(v.getOption() != null && v.getOption().getPoll() != null ? v.getOption().getPoll().getId() : null);
+        r.setPollId(
+                v.getOption() != null && v.getOption().getPoll() != null
+                        ? v.getOption().getPoll().getId()
+                        : null
+        );
         return r;
     }
 }
