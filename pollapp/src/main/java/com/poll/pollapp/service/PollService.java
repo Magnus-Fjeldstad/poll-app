@@ -1,5 +1,6 @@
 package com.poll.pollapp.service;
 
+import com.poll.pollapp.cache.PollVoteCache;
 import com.poll.pollapp.domain.Poll;
 import com.poll.pollapp.domain.User;
 import com.poll.pollapp.domain.VoteOption;
@@ -11,19 +12,47 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class PollService {
     private final PollRepo polls;
     private final UserRepo users;
     private final PollManager manager;
+    private final PollVoteCache pollVoteCache;
 
-    public PollService(PollRepo polls, UserRepo users, PollManager manager) {
+    public PollService(PollRepo polls, UserRepo users, PollManager manager, PollVoteCache pollVoteCache) {
         this.polls = polls;
         this.users = users;
         this.manager = manager;
-        System.out.println("PollService.manager@" + System.identityHashCode(manager));
+        this.pollVoteCache = pollVoteCache;
+    }
+
+    public Map<Integer, Long> getAggregatedVotes(UUID pollId) {
+        // 1. Sjekk cache
+        Map<String, String> cached = pollVoteCache.getVotes(pollId);
+        if (cached != null && !cached.isEmpty()) {
+            return cached.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            e -> Integer.parseInt(e.getKey()),
+                            e -> Long.parseLong(e.getValue())
+                    ));
+        }
+
+        Poll poll = get(pollId);
+        Map<Integer, Long> counts = poll.getOptions().stream()
+                .collect(Collectors.toMap(
+                        VoteOption::getPresentationOrder,
+                        opt -> poll.getVotes().stream()
+                                .filter(v -> v.getOption() != null && v.getOption().getId().equals(opt.getId()))
+                                .count()
+                ));
+        pollVoteCache.putVotes(pollId, counts);
+        System.out.println("Aggregated votes for poll " + pollId + ": " + counts);
+
+        return counts;
     }
 
     public List<Poll> findAll() {

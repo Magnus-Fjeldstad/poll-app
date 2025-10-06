@@ -1,5 +1,6 @@
 package com.poll.pollapp.service;
 
+import com.poll.pollapp.cache.PollVoteCache;
 import com.poll.pollapp.domain.Vote;
 import com.poll.pollapp.manager.PollManager;
 import com.poll.pollapp.repo.VoteRepo;
@@ -12,10 +13,12 @@ import java.util.UUID;
 public class VoteService {
     private final VoteRepo votes;
     private final PollManager manager;
+    private final PollVoteCache pollVoteCache;
 
-    public VoteService(VoteRepo votes, PollManager manager) {
+    public VoteService(VoteRepo votes, PollManager manager, PollVoteCache pollVoteCache) {
         this.votes = votes;
         this.manager = manager;
+        this.pollVoteCache = pollVoteCache;
     }
 
     public Vote get(UUID id) {
@@ -27,15 +30,21 @@ public class VoteService {
     }
 
     public Vote castOrChange(UUID pollId, UUID userId, UUID optionId) {
-        return manager.castOrChangeVote(pollId, userId, optionId);
+        Vote v = manager.castOrChangeVote(pollId, userId, optionId);
+        pollVoteCache.invalidate(pollId);
+        return v;
     }
 
     public void delete(UUID id) {
+        Vote v = get(id);
         votes.deleteById(id);
+        pollVoteCache.invalidate(v.getOption().getPoll().getId());
     }
 
     public Vote voteOption(UUID optionId, UUID userId, int value) {
-        return manager.castOrChangeOptionVote(optionId, userId, value);
+        Vote v = manager.castOrChangeOptionVote(optionId, userId, value);
+        pollVoteCache.invalidate(v.getOption().getPoll().getId());
+        return v;
     }
 
     public int scoreForOption(UUID optionId) {

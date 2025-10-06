@@ -12,8 +12,10 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
 
 @RestController
 @RequestMapping("/api/polls")
@@ -58,6 +60,11 @@ public class PollController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/votes")
+    public ResponseEntity<Map<Integer, Long>> getAggregatedVotes(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.getAggregatedVotes(id));
     }
 
     @GetMapping("/{id}/options")

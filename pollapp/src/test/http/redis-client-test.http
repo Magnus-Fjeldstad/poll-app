@@ -1,0 +1,109 @@
+### Inline env
+@host = http://localhost:8080
+@json = application/json
+
+### 1) Create user1 (Poll creator)
+# @name createUser1
+POST {{host}}/api/users
+Content-Type: {{json}}
+
+{
+  "username": "creatorUser",
+  "email": "creator@example.com"
+}
+
+> {%
+    const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.global.set("user1Id", body.id);
+    client.assert(!!body.id, "user1Id missing");
+%}
+
+### 2) Create user2 (Poll voter)
+# @name createUser2
+POST {{host}}/api/users
+Content-Type: {{json}}
+
+{
+  "username": "voterUser",
+  "email": "voter@example.com"
+}
+
+> {%
+    const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.global.set("user2Id", body.id);
+    client.assert(!!body.id, "user2Id missing");
+%}
+
+### 3) Create poll with two options (by user1)
+# @name createPoll
+POST {{host}}/api/polls
+Content-Type: {{json}}
+
+{
+  "creatorId": "{{user1Id}}",
+  "question": "Redis caching test poll",
+  "validUntil": "2030-01-01T00:00:00Z",
+  "options": [
+    { "caption": "Option A", "presentationOrder": 1 },
+    { "caption": "Option B", "presentationOrder": 2 }
+  ]
+}
+
+> {%
+    const p = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.global.set("pollId", p.id);
+    client.global.set("optA", p.options[0].id);
+    client.global.set("optB", p.options[1].id);
+    client.assert(p.options.length === 2, "Poll missing options");
+%}
+
+### 4) First call: get aggregated votes (CACHE MISS expected)
+# @name firstVotes
+GET {{host}}/api/polls/{{pollId}}/votes
+
+> {%
+    const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    client.global.set("firstVotes", JSON.stringify(body));
+    client.test("Votes object returned", () => client.assert(typeof body === 'object', "expected votes object"));
+    console.log("First call (should be MISS):", body);
+%}
+
+### 5) Second call: get aggregated votes again (CACHE HIT expected)
+# @name secondVotes
+GET {{host}}/api/polls/{{pollId}}/votes
+
+> {%
+    const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    const prev = JSON.parse(client.global.get("firstVotes"));
+    for (const key in prev) {
+        client.test("Cache value unchanged for option " + key, () => client.assert(body[key] === prev[key]));
+    }
+    console.log("Second call (should be HIT):", body);
+%}
+
+### 6) Cast a vote (user2 votes Option A) → should invalidate cache
+# @name castVote
+PUT {{host}}/api/polls/{{pollId}}/votes
+Content-Type: {{json}}
+
+{
+  "userId": "{{user2Id}}",
+  "optionId": "{{optA}}"
+}
+
+> {%
+    client.assert(response.status === 200 || response.status === 201, "Unexpected status after vote");
+%}
+
+### 7) Third call: get aggregated votes after vote (CACHE MISS + REGEN expected)
+# @name thirdVotes
+GET {{host}}/api/polls/{{pollId}}/votes
+
+> {%
+    const body = (typeof response.body === 'object') ? response.body : JSON.parse(response.body);
+    const totalVotes = Object.values(body).reduce((a, b) => a + b, 0);
+    console.log("Vote response:", response.status, response.body);
+
+    client.test("Vote count increased", () => client.assert(totalVotes >= 1, "Expected at least 1 vote after cast"));
+    console.log("Third call (after INVALIDATION, regenerated):", body);
+%}
