@@ -55,6 +55,8 @@ The cache was designed to speed up access to poll vote counts:
 
 Redis Hashes were used for the denormalized poll data, making it possible to increment votes efficiently with `HINCRBY`.
 
+5. [Cache implementation](https://github.com/Magnus-Fjeldstad/poll-app/blob/main/pollapp/src/main/java/com/poll/pollapp/cache/PollVoteCache.java)
+
 ---
 
 ## Technical Problems
@@ -62,6 +64,8 @@ Redis Hashes were used for the denormalized poll data, making it possible to inc
 - Installation and CLI tests worked without major issues.
 - One test I created did not behave as expected. After investigation, I suspect the issue is related to my API
   implementation rather than the Redis cache itself.
+
+- [Redis client test file](https://github.com/Magnus-Fjeldstad/poll-app/blob/main/pollapp/src/test/http/redis-client-test.http)
 
 ---
 
