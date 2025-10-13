@@ -4,6 +4,7 @@ import com.poll.pollapp.domain.Poll;
 import com.poll.pollapp.domain.User;
 import com.poll.pollapp.domain.Vote;
 import com.poll.pollapp.domain.VoteOption;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -17,44 +18,27 @@ public class PollManager {
     private final Map<UUID, Poll> polls = new ConcurrentHashMap<>();
     private final Map<UUID, VoteOption> options = new ConcurrentHashMap<>();
     private final Map<UUID, Vote> votes = new ConcurrentHashMap<>();
+    private final RabbitTemplate rabbitTemplate;
+
+    public PollManager(RabbitTemplate rabbitTemplate) {
+        this.rabbitTemplate = rabbitTemplate;
+    }
 
     // -------- Users --------
 
-    /**
-     * Lists all users
-     *
-     * @return List of users
-     */
     public List<User> listUsers() {
         return new ArrayList<>(users.values());
     }
 
-    /**
-     * Returns a user by ID, or empty if not found.
-     *
-     * @param id user ID
-     * @return Optional containing the user, or empty if not found
-     */
     public Optional<User> getUser(UUID id) {
         return Optional.ofNullable(users.get(id));
     }
 
-    /**
-     * Saves a user
-     *
-     * @param u user to save
-     * @return saved user
-     */
     public User saveUser(User u) {
         users.put(u.getId(), u);
         return u;
     }
 
-    /**
-     * Deletes a user and all their polls and votes
-     *
-     * @param id user ID
-     */
     public void deleteUser(UUID id) {
         var u = users.remove(id);
         if (u == null) return;
@@ -64,35 +48,14 @@ public class PollManager {
 
     // -------- Polls --------
 
-    /**
-     * Lists all polls
-     *
-     * @return List of polls
-     */
     public List<Poll> listPolls() {
         return new ArrayList<>(polls.values());
     }
 
-    /**
-     * Returns a poll by ID, or empty if not found.
-     *
-     * @param id
-     * @return Optional containing the poll, or empty if not found
-     */
     public Optional<Poll> getPoll(UUID id) {
         return Optional.ofNullable(polls.get(id));
     }
 
-    /**
-     * Creates a new poll
-     *
-     * @param creator
-     * @param question
-     * @param publishedAt
-     * @param validUntil
-     * @param opts
-     * @return created poll
-     */
     public Poll createPoll(User creator, String question, Instant publishedAt, Instant validUntil, List<VoteOption> opts) {
         Poll p = Poll.builder()
                 .question(question)
@@ -111,25 +74,51 @@ public class PollManager {
 
         polls.put(p.getId(), p);
         if (creator != null) creator.getCreated().add(p);
+
+        // ✅ Publish "poll created" event to RabbitMQ
+        try {
+            String routingKey = "poll." + p.getId();
+            Map<String, Object> event = Map.of(
+                    "type", "PollCreated",
+                    "pollId", p.getId().toString(),
+                    "question", p.getQuestion(),
+                    "timestamp", Instant.now().toString()
+            );
+            rabbitTemplate.convertAndSend("pollsExchange", routingKey, event);
+            System.out.println("RabbitMQ: PollCreated event sent for poll " + p.getId());
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to send PollCreated event: " + e.getMessage());
+        }
+
         return p;
     }
 
-    /**
-     * Saves a poll
-     *
-     * @param p poll to save
-     * @return saved poll
-     */
+    public Vote castAnonymousVote(UUID pollId, UUID optionId) {
+        Poll poll = required(getPoll(pollId), "Poll not found");
+        VoteOption option = required(getOption(optionId), "Option not found");
+        if (!belongsToPoll(option, poll)) {
+            throw new IllegalArgumentException("Option does not belong to the poll");
+        }
+        ensureNotExpired(poll);
+
+        Vote v = Vote.builder()
+                .voter(null)
+                .option(option)
+                .value(1)
+                .publishedAt(Instant.now())
+                .build();
+
+        poll.getVotes().add(v);
+        votes.put(v.getId(), v);
+        System.out.println("Anonymous vote added: poll=" + poll.getId() + " option=" + option.getCaption());
+        return v;
+    }
+
     public Poll savePoll(Poll p) {
         polls.put(p.getId(), p);
         return p;
     }
 
-    /**
-     * Deletes a poll and all its options and votes
-     *
-     * @param pollId poll ID
-     */
     public void deletePoll(UUID pollId) {
         Poll p = polls.remove(pollId);
         if (p == null) return;
@@ -148,35 +137,16 @@ public class PollManager {
 
     // -------- VoteOptions --------
 
-    /**
-     * Gets an option in a poll
-     *
-     * @param id option id
-     * @return Optional containing the option, or empty if not found
-     */
     public Optional<VoteOption> getOption(UUID id) {
         return Optional.ofNullable(options.get(id));
     }
 
-    /**
-     * Lists all options in a poll
-     *
-     * @param pollId poll ID
-     * @return List of options in the poll
-     */
     public List<VoteOption> listOptionsByPoll(UUID pollId) {
         return getPoll(pollId).map(Poll::getOptions).orElseGet(List::of);
     }
 
+    // -------- Votes --------
 
-    /**
-     * Casts or changes a vote
-     *
-     * @param pollId   poll ID
-     * @param userId   user ID
-     * @param optionId option ID
-     * @return casted or changed vote
-     */
     public Vote castOrChangeVote(UUID pollId, UUID userId, UUID optionId) {
         Poll poll = required(getPoll(pollId), "Poll not found");
         User voter = required(getUser(userId), "User not found");
@@ -211,9 +181,24 @@ public class PollManager {
         votes.put(v.getId(), v);
         System.out.println("Vote added: poll=" + poll.getId() + " voter=" + voter.getUsername() + " option=" + option.getCaption());
 
+        // ✅ Publish vote event to RabbitMQ
+        try {
+            String routingKey = "poll." + poll.getId();
+            Map<String, Object> event = Map.of(
+                    "type", "VoteCast",
+                    "pollId", poll.getId().toString(),
+                    "optionId", option.getId().toString(),
+                    "voter", voter.getUsername(),
+                    "timestamp", Instant.now().toString()
+            );
+            rabbitTemplate.convertAndSend("pollsExchange", routingKey, event);
+            System.out.println("RabbitMQ: VoteCast event sent for poll " + poll.getId());
+        } catch (Exception e) {
+            System.err.println("Failed to send VoteCast event: " + e.getMessage());
+        }
+
         return v;
     }
-
 
     public Vote castOrChangeOptionVote(UUID optionId, UUID userId, int value) {
         if (value != 1 && value != -1) throw new IllegalArgumentException("value must be +1 or -1");
@@ -254,31 +239,14 @@ public class PollManager {
         return v;
     }
 
-    /**
-     * Lists all votes in a poll
-     *
-     * @param pollId poll ID
-     * @return List of votes in the poll
-     */
     public List<Vote> listVotesByPoll(UUID pollId) {
         return getPoll(pollId).map(Poll::getVotes).orElseGet(List::of);
     }
 
-    /**
-     * Gets a vote by ID
-     *
-     * @param id vote ID
-     * @return Optional containing the vote, or empty if not found
-     */
     public Optional<Vote> getVote(UUID id) {
         return Optional.ofNullable(votes.get(id));
     }
 
-    /**
-     * Deletes a vote
-     *
-     * @param voteId vote ID
-     */
     public void deleteVote(UUID voteId) {
         Vote v = votes.remove(voteId);
         if (v == null) return;
@@ -288,13 +256,6 @@ public class PollManager {
         }
     }
 
-
-    /**
-     * Gets the score for an option
-     *
-     * @param optionId option ID
-     * @return score for the option
-     */
     public int scoreForOption(UUID optionId) {
         return getOption(optionId).map(opt ->
                 opt.getPoll().getVotes().stream()
@@ -304,7 +265,6 @@ public class PollManager {
         ).orElse(0);
     }
 
-
     public long countForOption(UUID optionId) {
         return getOption(optionId).map(opt ->
                 opt.getPoll().getVotes().stream()
@@ -313,8 +273,8 @@ public class PollManager {
         ).orElse(0L);
     }
 
+    // -------- Helpers --------
 
-    // -------- helpers --------
     private static <T> T required(Optional<T> opt, String msg) {
         return opt.orElseThrow(() -> new NoSuchElementException(msg));
     }
