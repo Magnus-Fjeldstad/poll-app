@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  pollapp:
+    build: .
+    container_name: pollapp
+    depends_on:
+      - redis
+      - rabbitmq
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+    ports:
+      - "8080:8080"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"      # AMQP (app-til-app)
+      - "15672:15672"    # RabbitMQ dashboard

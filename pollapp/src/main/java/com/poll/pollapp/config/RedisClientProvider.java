@@ -9,7 +9,11 @@ public class RedisClientProvider {
     private final UnifiedJedis jedis;
 
     public RedisClientProvider() {
-        this.jedis = new UnifiedJedis("redis://localhost:6379");
+        String host = System.getenv().getOrDefault("SPRING_REDIS_HOST", "localhost");
+        String port = System.getenv().getOrDefault("SPRING_REDIS_PORT", "6379");
+
+        String url = "redis://" + host + ":" + port;
+        this.jedis = new UnifiedJedis(url);
     }
 
     public UnifiedJedis getClient() {
